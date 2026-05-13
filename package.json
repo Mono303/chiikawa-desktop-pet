@@ -1,0 +1,33 @@
+{
+  "name": "chiikawa-pet",
+  "version": "1.0.0",
+  "description": "Chiikawa Desktop Pet",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win portable"
+  },
+  "dependencies": {
+    "gifuct-js": "^2.1.2"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "chiikawa.pet",
+    "productName": "ChiikawaPet",
+    "win": {
+      "target": "portable",
+      "certificateFile": "",
+      "signAndEditExecutable": false
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "assets/**/*",
+      "node_modules/**/*"
+    ]
+  }
+}

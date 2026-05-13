@@ -1,0 +1,31 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+  background: transparent;
+}
+
+#pet {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+#pet.dragging {
+  cursor: grabbing;
+}
+
+#pet.hover {
+  filter: brightness(1.1);
+}
+
+canvas {
+  display: block;
+  image-rendering: auto;
+}
