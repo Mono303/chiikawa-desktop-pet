@@ -78,6 +78,8 @@ let frameTimer = null;
 let isPlaying = false;
 let isDragging = false;
 let isOverCharacter = false;
+let loopCount = 0;
+const MAX_LOOPS = 2; // non-idle states loop this many times
 
 // Click combo detection
 const clickTimes = [];
@@ -135,6 +137,7 @@ function playState(state) {
   currentState = state;
   currentFrames = GIFS[state];
   currentFrameIndex = 0;
+  loopCount = 0;
   isPlaying = true;
   scheduleNextFrame();
 }
@@ -142,6 +145,13 @@ function playState(state) {
 function scheduleNextFrame() {
   if (!currentFrames || currentFrameIndex >= currentFrames.length) {
     if (currentState === 'idle') {
+      currentFrameIndex = 0;
+      offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
+      scheduleNextFrame();
+      return;
+    }
+    loopCount++;
+    if (loopCount < MAX_LOOPS) {
       currentFrameIndex = 0;
       offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
       scheduleNextFrame();
