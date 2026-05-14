@@ -9,6 +9,68 @@ const pet = document.getElementById('pet');
 const STATES = ['1', '2', '3', '4', '5', '6', '7'];
 const GIFS = {};
 
+// ---- Sound engine (Web Audio API synthesis) ----
+let audioCtx = null;
+let audioReady = false;
+
+function ensureAudio() {
+  if (audioReady) return true;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().then(() => { audioReady = true; });
+      return false;
+    }
+    audioReady = true;
+    return true;
+  } catch { return false; }
+}
+
+function playTone(freq, duration, type = 'sine', volume = 0.15) {
+  try {
+    if (!ensureAudio() || !audioCtx || audioCtx.state !== 'running') return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+  } catch (e) {
+    console.log('Audio error:', e.message);
+  }
+}
+
+// Each state has a cute sound: [freq, duration, waveType]
+const STATE_SOUNDS = {
+  '1':  [523, 0.15, 'sine'],    // C5
+  '2':  [587, 0.15, 'sine'],    // D5
+  '3':  [659, 0.15, 'sine'],    // E5
+  '4':  [698, 0.15, 'sine'],    // F5
+  '5':  [784, 0.15, 'sine'],    // G5
+  '6':  [880, 0.15, 'sine'],    // A5
+  '7':  [988, 0.15, 'sine'],    // B5
+  'cry': [300, 0.4, 'sine']      // sad low tone
+};
+
+function playStateSound(state) {
+  const s = STATE_SOUNDS[state];
+  if (!s) return;
+  if (state === 'cry') {
+    // Wobble effect for cry
+    playTone(s[0], s[1], s[2], 0.12);
+    setTimeout(() => playTone(s[0] - 40, s[1] + 0.1, s[2], 0.10), 150);
+    setTimeout(() => playTone(s[0] - 80, s[1] + 0.2, s[2], 0.08), 350);
+  } else {
+    playTone(s[0], s[1], s[2], 0.12);
+    // Double note for random states
+    setTimeout(() => playTone(s[0] + 100, s[1] * 0.7, s[2], 0.08), 80);
+  }
+}
+
 let currentState = 'idle';
 let currentFrames = null;
 let currentFrameIndex = 0;
@@ -67,6 +129,8 @@ function renderFrame(frames, frameIndex) {
 function playState(state) {
   if (frameTimer) { clearTimeout(frameTimer); frameTimer = null; }
   offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
+
+  if (state !== 'idle') playStateSound(state);
 
   currentState = state;
   currentFrames = GIFS[state];
@@ -147,7 +211,17 @@ pet.addEventListener('pointerleave', () => {
   window.electronAPI.setIgnoreMouse(true, { forward: true });
 });
 
+// First interaction: pre-init AudioContext (Chromium autoplay policy)
+let audioInitialized = false;
+function firstInteraction() {
+  if (!audioInitialized) {
+    audioInitialized = true;
+    ensureAudio();
+  }
+}
+
 pet.addEventListener('pointerdown', (e) => {
+  firstInteraction();
   if (!isOverCharacter) return;
 
   clickTimes.push(Date.now());
