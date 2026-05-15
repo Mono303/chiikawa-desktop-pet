@@ -19,7 +19,6 @@
     "productName": "ChiikawaPet",
     "win": {
       "target": "portable",
-      "certificateFile": "",
       "signAndEditExecutable": false
     },
     "files": [

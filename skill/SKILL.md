@@ -29,6 +29,7 @@ Creates a Windows desktop pet that displays a Chiikawa character. The character:
 - On 3 rapid clicks within 3 seconds: triggers the cry animation (`cry.gif`)
 - Is draggable by holding and moving the mouse
 - Right-click shows a context menu (reset position / quit)
+- System tray icon shows running status with quick-quit menu
 
 ## Project Structure
 
@@ -40,10 +41,11 @@ chiikawa-pet/
 │   ├── index.html         # Pet window HTML
 │   ├── style.css          # Styles
 │   └── app.js             # Core logic (state machine, GIF rendering, interaction)
-├── assets/                # GIF assets (user-replaceable)
+├── assets/                # GIF assets + optional audio (user-replaceable)
 │   ├── nomal.gif          # Default idle loop
 │   ├── 1.gif ~ 7.gif      # Random action animations
-│   └── cry.gif            # Cry animation (rapid-click trigger)
+│   ├── cry.gif            # Cry animation (rapid-click trigger)
+│   ├── sound1.mp3 ~ soundN.mp3  # Optional custom sound effects (named independently)
 ├── package.json
 ├── start.bat              # Windows launcher
 └── README.md
@@ -70,8 +72,9 @@ Full design doc at `docs/superpowers/specs/2026-05-13-chiikawa-desktop-pet-desig
 ### main.js — Electron Main Process
 
 ```js
-const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 let win;
 
@@ -112,7 +115,33 @@ function createWindow() {
   ipcMain.on('show-context-menu', () => ctxMenu.popup({ window: win }));
 }
 
-app.whenReady().then(createWindow);
+// ---- System tray icon ----
+let tray = null;
+
+function createTray() {
+  const size = 16;
+  const buf = Buffer.alloc(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = x - (size - 1) / 2;
+      const dy = y - (size - 1) / 2;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const i = (y * size + x) * 4;
+      if (dist < size / 2) {
+        buf[i] = 0x00; buf[i+1] = 0xcc; buf[i+2] = 0x4a; buf[i+3] = 0xff;
+      } else {
+        buf[i+3] = 0;
+      }
+    }
+  }
+  tray = new Tray(nativeImage.createFromBitmap(buf, { width: size, height: size }));
+  tray.setToolTip('吉伊桌宠 — 运行中');
+  const m = Menu.buildFromTemplate([{ label: 'Quit', click: () => app.quit() }]);
+  tray.setContextMenu(m);
+  tray.on('click', () => tray.popUpContextMenu());
+}
+
+app.whenReady().then(() => { createWindow(); createTray(); });
 app.on('window-all-closed', () => app.quit());
 
 ipcMain.on('set-ignore-mouse', (_, ignore, options) => {
@@ -127,6 +156,16 @@ ipcMain.on('move-window', (_, dx, dy) => {
 ipcMain.on('resize-window', (_, w, h) => {
   win.setSize(Math.round(w), Math.round(h));
 });
+
+ipcMain.handle('get-audio-files', async () => {
+  const assetsDir = path.join(__dirname, 'assets');
+  try {
+    const files = fs.readdirSync(assetsDir);
+    return { mp3s: files.filter(f => f.endsWith('.mp3')) };
+  } catch {
+    return { mp3s: [] };
+  }
+});
 ```
 
 ### preload.js — Context Bridge
@@ -139,7 +178,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setIgnoreMouse: (ignore, options) => ipcRenderer.send('set-ignore-mouse', ignore, options),
   moveWindow: (dx, dy) => ipcRenderer.send('move-window', dx, dy),
   resizeWindow: (w, h) => ipcRenderer.send('resize-window', w, h),
-  showContextMenu: () => ipcRenderer.send('show-context-menu')
+  showContextMenu: () => ipcRenderer.send('show-context-menu'),
+  getAudioFiles: () => ipcRenderer.invoke('get-audio-files')
 });
 
 contextBridge.exposeInMainWorld('gifuct', {
@@ -161,6 +201,115 @@ const pet = document.getElementById('pet');
 const STATES = ['1', '2', '3', '4', '5', '6', '7'];
 const GIFS = {};
 
+// ---- Sound engine (Web Audio API synthesis) ----
+let audioCtx = null;
+let audioReady = false;
+
+function ensureAudio() {
+  if (audioReady) return true;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().then(() => { audioReady = true; });
+      return false;
+    }
+    audioReady = true;
+    return true;
+  } catch { return false; }
+}
+
+function playTone(freq, duration, type = 'sine', volume = 0.15) {
+  try {
+    if (!ensureAudio() || !audioCtx || audioCtx.state !== 'running') return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+  } catch (e) {
+    console.log('Audio error:', e.message);
+  }
+}
+
+// ---- Sound pools (decoupled from state numbers) ----
+const RANDOM_SOUND_POOL = [
+  [523, 0.15, 'sine'],    [587, 0.15, 'sine'],
+  [659, 0.15, 'sine'],    [698, 0.15, 'sine'],
+  [784, 0.15, 'sine'],    [880, 0.15, 'sine'],
+  [988, 0.15, 'sine'],    [1047, 0.12, 'triangle'],
+  [554, 0.18, 'triangle'], [740, 0.12, 'sine'],
+  [415, 0.2, 'triangle'],  [1319, 0.1, 'sine'],
+];
+
+const CRY_SOUND = [300, 0.4, 'sine'];
+let loadedAudioBuffers = [];
+let cryAudioBuffer = null;
+
+async function loadAudioFiles() {
+  const files = await window.electronAPI.getAudioFiles();
+  if (!files.mp3s || files.mp3s.length === 0) return 0;
+
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  for (const name of files.mp3s) {
+    try {
+      const resp = await fetch(`../assets/${encodeURIComponent(name)}`);
+      if (!resp.ok) continue;
+      const arrayBuf = await resp.arrayBuffer();
+      const decoded = await audioCtx.decodeAudioData(arrayBuf);
+
+      if (name === 'cry.mp3') {
+        cryAudioBuffer = decoded;
+      } else {
+        loadedAudioBuffers.push(decoded);
+      }
+    } catch { /* skip */ }
+  }
+
+  return loadedAudioBuffers.length;
+}
+
+function playLoadedBuffer(buffer) {
+  if (!audioCtx || audioCtx.state !== 'running') return;
+  const source = audioCtx.createBufferSource();
+  const gain = audioCtx.createGain();
+  source.buffer = buffer;
+  gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+  source.connect(gain);
+  gain.connect(audioCtx.destination);
+  source.start();
+}
+
+function pickRandomSound() {
+  if (loadedAudioBuffers.length > 0) {
+    const buf = loadedAudioBuffers[Math.floor(Math.random() * loadedAudioBuffers.length)];
+    return () => playLoadedBuffer(buf);
+  }
+  const s = RANDOM_SOUND_POOL[Math.floor(Math.random() * RANDOM_SOUND_POOL.length)];
+  return () => {
+    playTone(s[0], s[1], s[2], 0.12);
+    setTimeout(() => playTone(s[0] + 100, s[1] * 0.7, s[2], 0.08), 80);
+  };
+}
+
+function playCrySound() {
+  if (cryAudioBuffer) { playLoadedBuffer(cryAudioBuffer); return; }
+  const s = CRY_SOUND;
+  playTone(s[0], s[1], s[2], 0.12);
+  setTimeout(() => playTone(s[0] - 40, s[1] + 0.1, s[2], 0.10), 150);
+  setTimeout(() => playTone(s[0] - 80, s[1] + 0.2, s[2], 0.08), 350);
+}
+
+function playStateSound(state) {
+  if (state === 'cry') playCrySound();
+  else pickRandomSound()();
+}
+
 let currentState = 'idle';
 let currentFrames = null;
 let currentFrameIndex = 0;
@@ -168,6 +317,8 @@ let frameTimer = null;
 let isPlaying = false;
 let isDragging = false;
 let isOverCharacter = false;
+let loopCount = 0;
+const MAX_LOOPS = 2;
 
 const clickTimes = [];
 const COMBO_WINDOW = 3000;
@@ -218,9 +369,12 @@ function playState(state) {
   if (frameTimer) { clearTimeout(frameTimer); frameTimer = null; }
   offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
 
+  if (state !== 'idle') playStateSound(state);
+
   currentState = state;
   currentFrames = GIFS[state];
   currentFrameIndex = 0;
+  loopCount = 0;
   isPlaying = true;
   scheduleNextFrame();
 }
@@ -228,6 +382,13 @@ function playState(state) {
 function scheduleNextFrame() {
   if (!currentFrames || currentFrameIndex >= currentFrames.length) {
     if (currentState === 'idle') {
+      currentFrameIndex = 0;
+      offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
+      scheduleNextFrame();
+      return;
+    }
+    loopCount++;
+    if (loopCount < MAX_LOOPS) {
       currentFrameIndex = 0;
       offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
       scheduleNextFrame();
@@ -270,6 +431,7 @@ function isOnCharacter(cx, cy) {
   } catch { return false; }
 }
 
+// ---- Pointer events ----
 pet.addEventListener('pointermove', (e) => {
   const { x, y } = getCursorPos(e);
   const onChar = isOnCharacter(x, y);
@@ -286,15 +448,20 @@ pet.addEventListener('pointerleave', () => {
   window.electronAPI.setIgnoreMouse(true, { forward: true });
 });
 
+let audioInitialized = false;
+function firstInteraction() {
+  if (!audioInitialized) { audioInitialized = true; ensureAudio(); }
+}
+
 pet.addEventListener('pointerdown', (e) => {
+  firstInteraction();
   if (!isOverCharacter) return;
   clickTimes.push(Date.now());
   while (clickTimes.length > 0 && clickTimes[0] < Date.now() - COMBO_WINDOW) {
     clickTimes.shift();
   }
   if (clickTimes.length >= COMBO_THRESHOLD) {
-    triggerCry();
-    return;
+    triggerCry(); return;
   }
   if (currentState === 'idle') triggerRandom();
   isDragging = true;
@@ -316,7 +483,7 @@ pet.addEventListener('contextmenu', (e) => {
 });
 
 setInterval(triggerRandom, 60000);
-loadAllGIFs().then(() => playState('idle'));
+Promise.all([loadAllGIFs(), loadAudioFiles()]).then(() => playState('idle'));
 ```
 
 ### renderer/index.html
@@ -378,7 +545,7 @@ The skill bundles 9 default GIF assets in `assets/`:
 - `1.gif` through `7.gif` — random action animations
 - `cry.gif` — cry animation
 
-Users can replace any of these files with their own GIFs (same filename) to customize the pet's appearance.
+Users can add `sound1.mp3` through `soundN.mp3` for custom sound effects, or rely on the built-in synthesized tones.
 
 ## Setup Instructions
 
@@ -404,10 +571,18 @@ The built exe will be at `dist/ChiikawaPet 1.0.0.exe`.
 
 ## Customizing Assets
 
+### GIF Animations
 Replace any GIF in `assets/` with your own file (keep the same filename):
 - Keep GIF sizes reasonable (< 2MB per file)
 - The window auto-sizes to the largest GIF's dimensions
 - Background should be transparent for best results
+
+### Sound Effects (Optional)
+Place `sound1.mp3`, `sound2.mp3`, ... `soundN.mp3` in `assets/` to replace synthesized tones:
+- Sound files are **decoupled** from animation states — each click picks a random sound from the pool
+- You can have more (or fewer) sound files than action states
+- The cry animation uses a fixed synthesized tone (not affected by sound files)
+- Without any mp3 files, the app uses built-in synthesized tones (12 variants)
 
 ## GitHub
 

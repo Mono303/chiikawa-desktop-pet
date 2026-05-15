@@ -1,5 +1,6 @@
-const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 let win;
 
@@ -49,7 +50,41 @@ function createWindow() {
   ipcMain.on('show-context-menu', () => ctxMenu.popup({ window: win }));
 }
 
-app.whenReady().then(createWindow);
+// ---- System tray icon ----
+let tray = null;
+
+function createTray() {
+  const size = 16;
+  const buf = Buffer.alloc(size * size * 4); // BGRA
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = x - (size - 1) / 2;
+      const dy = y - (size - 1) / 2;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const i = (y * size + x) * 4;
+      if (dist < size / 2) {
+        buf[i] = 0x00;     // B
+        buf[i + 1] = 0xcc; // G
+        buf[i + 2] = 0x4a; // R
+        buf[i + 3] = 0xff; // A
+      } else {
+        buf[i + 3] = 0;    // transparent
+      }
+    }
+  }
+
+  tray = new Tray(nativeImage.createFromBitmap(buf, { width: size, height: size }));
+  tray.setToolTip('吉伊桌宠 — 运行中');
+
+  const trayMenu = Menu.buildFromTemplate([
+    { label: '退出', click: () => app.quit() }
+  ]);
+
+  tray.setContextMenu(trayMenu);
+  tray.on('click', () => tray.popUpContextMenu());
+}
+
+app.whenReady().then(() => { createWindow(); createTray(); });
 app.on('window-all-closed', () => app.quit());
 
 ipcMain.on('set-ignore-mouse', (_, ignore, options) => {
@@ -63,4 +98,15 @@ ipcMain.on('move-window', (_, dx, dy) => {
 
 ipcMain.on('resize-window', (_, w, h) => {
   win.setSize(Math.round(w), Math.round(h));
+});
+
+ipcMain.handle('get-audio-files', async () => {
+  const assetsDir = path.join(__dirname, 'assets');
+  try {
+    const files = fs.readdirSync(assetsDir);
+    const mp3Files = files.filter(f => f.endsWith('.mp3'));
+    return { mp3s: mp3Files };
+  } catch {
+    return { mp3s: [] };
+  }
 });

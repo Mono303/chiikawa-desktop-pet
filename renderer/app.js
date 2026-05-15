@@ -44,30 +44,92 @@ function playTone(freq, duration, type = 'sine', volume = 0.15) {
   }
 }
 
-// Each state has a cute sound: [freq, duration, waveType]
-const STATE_SOUNDS = {
-  '1':  [523, 0.15, 'sine'],    // C5
-  '2':  [587, 0.15, 'sine'],    // D5
-  '3':  [659, 0.15, 'sine'],    // E5
-  '4':  [698, 0.15, 'sine'],    // F5
-  '5':  [784, 0.15, 'sine'],    // G5
-  '6':  [880, 0.15, 'sine'],    // A5
-  '7':  [988, 0.15, 'sine'],    // B5
-  'cry': [300, 0.4, 'sine']      // sad low tone
-};
+// ---- Sound pools (decoupled from state numbers) ----
+// Random sound pool — more entries than states (7), picked randomly per action
+const RANDOM_SOUND_POOL = [
+  [523, 0.15, 'sine'],    // C5
+  [587, 0.15, 'sine'],    // D5
+  [659, 0.15, 'sine'],    // E5
+  [698, 0.15, 'sine'],    // F5
+  [784, 0.15, 'sine'],    // G5
+  [880, 0.15, 'sine'],    // A5
+  [988, 0.15, 'sine'],    // B5
+  [1047, 0.12, 'triangle'], // C6
+  [554, 0.18, 'triangle'],  // C#5
+  [740, 0.12, 'sine'],      // F#5
+  [415, 0.2, 'triangle'],   // G#4
+  [1319, 0.1, 'sine'],      // E6
+];
+
+const CRY_SOUND = [300, 0.4, 'sine'];
+
+// Loaded audio buffers (from mp3 files in assets/)
+let loadedAudioBuffers = [];
+let cryAudioBuffer = null;
+
+async function loadAudioFiles() {
+  const files = await window.electronAPI.getAudioFiles();
+  if (!files.mp3s || files.mp3s.length === 0) return 0;
+
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  for (const name of files.mp3s) {
+    try {
+      const resp = await fetch(`../assets/${encodeURIComponent(name)}`);
+      if (!resp.ok) continue;
+      const arrayBuf = await resp.arrayBuffer();
+      const decoded = await audioCtx.decodeAudioData(arrayBuf);
+
+      if (name === 'cry.mp3') {
+        cryAudioBuffer = decoded;
+      } else {
+        loadedAudioBuffers.push(decoded);
+      }
+    } catch { /* skip unloadable file */ }
+  }
+
+  return loadedAudioBuffers.length;
+}
+
+function playLoadedBuffer(buffer) {
+  if (!audioCtx || audioCtx.state !== 'running') return;
+  const source = audioCtx.createBufferSource();
+  const gain = audioCtx.createGain();
+  source.buffer = buffer;
+  gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+  source.connect(gain);
+  gain.connect(audioCtx.destination);
+  source.start();
+}
+
+function pickRandomSound() {
+  if (loadedAudioBuffers.length > 0) {
+    const buf = loadedAudioBuffers[Math.floor(Math.random() * loadedAudioBuffers.length)];
+    return () => playLoadedBuffer(buf);
+  }
+  const s = RANDOM_SOUND_POOL[Math.floor(Math.random() * RANDOM_SOUND_POOL.length)];
+  return () => {
+    playTone(s[0], s[1], s[2], 0.12);
+    setTimeout(() => playTone(s[0] + 100, s[1] * 0.7, s[2], 0.08), 80);
+  };
+}
+
+function playCrySound() {
+  if (cryAudioBuffer) {
+    playLoadedBuffer(cryAudioBuffer);
+    return;
+  }
+  const s = CRY_SOUND;
+  playTone(s[0], s[1], s[2], 0.12);
+  setTimeout(() => playTone(s[0] - 40, s[1] + 0.1, s[2], 0.10), 150);
+  setTimeout(() => playTone(s[0] - 80, s[1] + 0.2, s[2], 0.08), 350);
+}
 
 function playStateSound(state) {
-  const s = STATE_SOUNDS[state];
-  if (!s) return;
   if (state === 'cry') {
-    // Wobble effect for cry
-    playTone(s[0], s[1], s[2], 0.12);
-    setTimeout(() => playTone(s[0] - 40, s[1] + 0.1, s[2], 0.10), 150);
-    setTimeout(() => playTone(s[0] - 80, s[1] + 0.2, s[2], 0.08), 350);
+    playCrySound();
   } else {
-    playTone(s[0], s[1], s[2], 0.12);
-    // Double note for random states
-    setTimeout(() => playTone(s[0] + 100, s[1] * 0.7, s[2], 0.08), 80);
+    pickRandomSound()();
   }
 }
 
@@ -275,4 +337,4 @@ pet.addEventListener('contextmenu', (e) => {
 // Every 60s pick a random state
 setInterval(triggerRandom, 60000);
 
-loadAllGIFs().then(() => playState('idle'));
+Promise.all([loadAllGIFs(), loadAudioFiles()]).then(() => playState('idle'));
