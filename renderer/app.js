@@ -337,4 +337,9 @@ pet.addEventListener('contextmenu', (e) => {
 // Every 60s pick a random state
 setInterval(triggerRandom, 60000);
 
-Promise.all([loadAllGIFs(), loadAudioFiles()]).then(() => playState('idle'));
+Promise.all([loadAllGIFs(), loadAudioFiles()]).then(async () => {
+  await loadPersistData();
+  pet.appendChild(statusBar);
+  updateStatusBar();
+  playState('idle');
+});
