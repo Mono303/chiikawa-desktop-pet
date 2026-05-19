@@ -110,3 +110,20 @@ ipcMain.handle('get-audio-files', async () => {
     return { mp3s: [] };
   }
 });
+
+const userDataPath = app.getPath('userData');
+const persistFile = path.join(userDataPath, 'pet-persist.json');
+
+ipcMain.handle('save-persist-data', async (_, data) => {
+  try {
+    fs.writeFileSync(persistFile, JSON.stringify(data, null, 2), 'utf-8');
+    return true;
+  } catch { return false; }
+});
+
+ipcMain.handle('load-persist-data', async () => {
+  try {
+    const raw = fs.readFileSync(persistFile, 'utf-8');
+    return JSON.parse(raw);
+  } catch { return null; }
+});

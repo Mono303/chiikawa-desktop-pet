@@ -6,7 +6,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   moveWindow: (dx, dy) => ipcRenderer.send('move-window', dx, dy),
   resizeWindow: (w, h) => ipcRenderer.send('resize-window', w, h),
   showContextMenu: () => ipcRenderer.send('show-context-menu'),
-  getAudioFiles: () => ipcRenderer.invoke('get-audio-files')
+  getAudioFiles: () => ipcRenderer.invoke('get-audio-files'),
+  savePersistData: (data) => ipcRenderer.invoke('save-persist-data', data),
+  loadPersistData: () => ipcRenderer.invoke('load-persist-data')
 });
 
 contextBridge.exposeInMainWorld('gifuct', {
