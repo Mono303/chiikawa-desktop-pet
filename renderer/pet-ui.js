@@ -19,7 +19,7 @@ const statusBar = (() => {
 })();
 
 function updateStatusBar() {
-  document.getElementById('sb-hunger-fill').style.width = (store.hunger / STAT_MAX * 100) + '%';
-  document.getElementById('sb-mood-fill').style.width = (store.mood / STAT_MAX * 100) + '%';
-  document.getElementById('sb-money').textContent = '💰 ' + store.money;
+  document.getElementById('sb-hunger-fill').style.width = ((store.hunger || 0) / STAT_MAX * 100) + '%';
+  document.getElementById('sb-mood-fill').style.width = ((store.mood || 0) / STAT_MAX * 100) + '%';
+  document.getElementById('sb-money').textContent = '💰 ' + (store.money || 0);
 }

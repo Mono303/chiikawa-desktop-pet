@@ -342,4 +342,7 @@ Promise.all([loadAllGIFs(), loadAudioFiles()]).then(async () => {
   pet.appendChild(statusBar);
   updateStatusBar();
   playState('idle');
+}).catch(err => {
+  console.error('Startup failed:', err);
+  playState('idle');
 });
