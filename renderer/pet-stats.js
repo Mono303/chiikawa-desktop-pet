@@ -11,7 +11,6 @@ const SHOP_ITEMS = [
 ];
 
 const STAT_MAX = 100;
-const INITIAL_STATE = { hunger: 80, mood: 80, money: 100, inventory: { food: 0, toy: 0 }, goals: [] };
 
 // ---- Data store ----
 const store = {
@@ -42,12 +41,15 @@ async function saveNow() {
 async function loadPersistData() {
   const data = await window.electronAPI.loadPersistData();
   if (!data) return;
-  store.hunger = data.hunger ?? 80;
-  store.mood = data.mood ?? 80;
-  store.money = data.money ?? 100;
-  store.inventory = data.inventory ?? { food: 0, toy: 0 };
-  store.goals = data.goals ?? [];
-  store._nextGoalId = data.nextGoalId ?? 1;
+  if (typeof data.hunger === 'number') store.hunger = Math.max(0, Math.min(STAT_MAX, data.hunger));
+  if (typeof data.mood === 'number') store.mood = Math.max(0, Math.min(STAT_MAX, data.mood));
+  if (typeof data.money === 'number') store.money = Math.max(0, data.money);
+  if (data.inventory && typeof data.inventory === 'object') {
+    store.inventory.food = Math.max(0, data.inventory.food || 0);
+    store.inventory.toy = Math.max(0, data.inventory.toy || 0);
+  }
+  if (Array.isArray(data.goals)) store.goals = data.goals;
+  if (typeof data.nextGoalId === 'number') store._nextGoalId = data.nextGoalId;
 }
 
 // ---- Stats ----
@@ -84,7 +86,7 @@ function isCryLocked() {
 
 // ---- Goals ----
 function addGoal(text, reward) {
-  if (!text.trim() || reward <= 0) return false;
+  if (!text.trim() || typeof reward !== 'number' || reward <= 0) return false;
   store.goals.push({ id: store._nextGoalId++, text: text.trim(), reward, done: false });
   scheduleSave();
   return true;
@@ -95,6 +97,8 @@ function completeGoal(id) {
   if (!goal || goal.done) return false;
   goal.done = true;
   store.money += goal.reward;
+  // Keep last 50 completed goals visible, prune older ones
+  store.goals = store.goals.slice(-50);
   scheduleSave();
   return true;
 }
