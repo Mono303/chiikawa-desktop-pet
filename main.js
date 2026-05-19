@@ -111,19 +111,26 @@ ipcMain.handle('get-audio-files', async () => {
   }
 });
 
-const userDataPath = app.getPath('userData');
-const persistFile = path.join(userDataPath, 'pet-persist.json');
+function getPersistFile() {
+  return path.join(app.getPath('userData'), 'pet-persist.json');
+}
 
 ipcMain.handle('save-persist-data', async (_, data) => {
   try {
-    fs.writeFileSync(persistFile, JSON.stringify(data, null, 2), 'utf-8');
+    await fs.promises.writeFile(getPersistFile(), JSON.stringify(data, null, 2), 'utf-8');
     return true;
-  } catch { return false; }
+  } catch (err) {
+    console.error('[persist] save failed:', err);
+    return false;
+  }
 });
 
 ipcMain.handle('load-persist-data', async () => {
   try {
-    const raw = fs.readFileSync(persistFile, 'utf-8');
+    const raw = await fs.promises.readFile(getPersistFile(), 'utf-8');
     return JSON.parse(raw);
-  } catch { return null; }
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.error('[persist] load failed:', err);
+    return null;
+  }
 });
