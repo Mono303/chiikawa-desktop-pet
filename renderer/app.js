@@ -341,6 +341,10 @@ Promise.all([loadAllGIFs(), loadAudioFiles()]).then(async () => {
   await loadPersistData();
   pet.appendChild(statusBar);
   updateStatusBar();
+  document.getElementById('sb-hunger').onclick = () => showItemPopup('food');
+  document.getElementById('sb-mood').onclick = () => showItemPopup('toy');
+  document.getElementById('btn-shop').onclick = () => showShop();
+  document.getElementById('btn-goals').onclick = () => showGoals();
   playState('idle');
 }).catch(err => {
   console.error('Startup failed:', err);
