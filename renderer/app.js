@@ -237,13 +237,32 @@ function pickRandomState() {
 }
 
 function triggerRandom() {
-  if (currentState === 'idle') playState(pickRandomState());
+  if (currentState === 'idle' && !isCryLocked()) playState(pickRandomState());
 }
 
 function triggerCry() {
   clickTimes.length = 0;
   playState('cry');
 }
+
+// ---- Stat system integration ----
+function checkCryLock() {
+  if (isCryLocked()) {
+    if (currentState !== 'cry') {
+      clickTimes.length = 0;
+      playState('cry');
+    }
+  }
+}
+
+// Decay every 30 minutes (1800000 ms)
+const DECAY_INTERVAL = 1800000;
+
+setInterval(() => {
+  decayTick();
+  updateStatusBar();
+  checkCryLock();
+}, DECAY_INTERVAL);
 
 // ---- Mouse hit detection ----
 function getCursorPos(e) {
