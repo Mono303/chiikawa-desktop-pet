@@ -170,7 +170,7 @@ async function loadAllGIFs() {
   canvas.height = maxH;
   offscreen.width = maxW;
   offscreen.height = maxH;
-  window.electronAPI.resizeWindow(maxW, maxH);
+  window.electronAPI.resizeWindow(maxW, maxH + 44);
 }
 
 function renderFrame(frames, frameIndex) {
