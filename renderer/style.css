@@ -69,3 +69,7 @@ canvas {
 .popup-row:hover { background: rgba(255,255,255,0.18); }
 .popup-effect { color: #4caf50; }
 .popup-empty { color: #888; font-size: 13px; text-align: center; padding: 16px; }
+
+.shop-box { min-width: 250px; }
+.shop-btn { background: #4caf50; border: none; border-radius: 4px; color: white; padding: 2px 10px; cursor: pointer; font-size: 12px; }
+.shop-btn:disabled { background: #555; cursor: default; }

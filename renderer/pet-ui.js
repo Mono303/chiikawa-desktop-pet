@@ -71,3 +71,41 @@ function hidePopup() {
   // Re-enable click-through — next pointermove will correct it
   window.electronAPI.setIgnoreMouse(true, { forward: true });
 }
+
+// ---- Shop panel ----
+function showShop() {
+  hidePopup();
+  const overlay = document.createElement('div');
+  overlay.className = 'popup-overlay';
+  overlay.onclick = hidePopup;
+
+  const box = document.createElement('div');
+  box.className = 'popup-box shop-box';
+  box.onclick = e => e.stopPropagation();
+  box.innerHTML = '<div class="popup-title">🏪 商店</div><div class="popup-list" id="shop-list"></div>';
+
+  const list = box.querySelector('#shop-list');
+  renderShopList(list);
+
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  window.electronAPI.setIgnoreMouse(false, { forward: true });
+}
+
+function renderShopList(listEl) {
+  listEl.innerHTML = '';
+  for (const item of SHOP_ITEMS) {
+    const row = document.createElement('div');
+    row.className = 'popup-row';
+    const canBuy = store.money >= item.price;
+    row.innerHTML = `${item.emoji} ${item.name}  <span>${item.price}💰 <button class="shop-btn" ${canBuy ? '' : 'disabled'}>购买</button></span>`;
+    if (canBuy) {
+      row.querySelector('.shop-btn').onclick = () => {
+        buyItem(item.id);
+        updateStatusBar();
+        renderShopList(listEl);
+      };
+    }
+    listEl.appendChild(row);
+  }
+}
