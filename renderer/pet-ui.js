@@ -109,3 +109,71 @@ function renderShopList(listEl) {
     listEl.appendChild(row);
   }
 }
+
+// ---- Goal panel ----
+function showGoals() {
+  hidePopup();
+  const overlay = document.createElement('div');
+  overlay.className = 'popup-overlay';
+  overlay.onclick = hidePopup;
+
+  const box = document.createElement('div');
+  box.className = 'popup-box goal-box';
+  box.onclick = e => e.stopPropagation();
+  box.innerHTML = '<div class="popup-title">🎯 目标</div><div id="goal-list"></div><div class="goal-add"><input id="goal-input" placeholder="写一个目标..." /><input id="goal-reward" type="number" min="1" placeholder="💰" /><button id="goal-add-btn">添加</button></div>';
+
+  const listEl = box.querySelector('#goal-list');
+  renderGoalList(listEl);
+
+  // Add goal handler
+  const input = box.querySelector('#goal-input');
+  const reward = box.querySelector('#goal-reward');
+  box.querySelector('#goal-add-btn').onclick = () => {
+    const r = parseInt(reward.value) || 0;
+    if (addGoal(input.value, r)) {
+      input.value = ''; reward.value = '';
+      renderGoalList(listEl);
+      updateStatusBar();
+    }
+  };
+  input.onkeydown = e => { if (e.key === 'Enter') box.querySelector('#goal-add-btn').click(); };
+
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  window.electronAPI.setIgnoreMouse(false, { forward: true });
+}
+
+function renderGoalList(container) {
+  container.innerHTML = '';
+  if (store.goals.length === 0) {
+    container.innerHTML = '<div class="popup-empty" style="padding:12px">还没有目标</div>';
+    return;
+  }
+  for (const g of store.goals) {
+    const row = document.createElement('div');
+    row.className = 'goal-row' + (g.done ? ' goal-done' : '');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = g.done;
+    cb.disabled = g.done;
+    if (!g.done) {
+      cb.onchange = () => {
+        if (confirm(`确认完成"${g.text}"，获得 ${g.reward}💰？`)) {
+          completeGoal(g.id);
+          updateStatusBar();
+          renderGoalList(container);
+        } else { cb.checked = false; }
+      };
+    }
+    row.appendChild(cb);
+    const text = document.createElement('span');
+    text.className = 'goal-text';
+    text.textContent = g.text;
+    row.appendChild(text);
+    const badge = document.createElement('span');
+    badge.className = 'goal-reward';
+    badge.textContent = g.reward + '💰';
+    row.appendChild(badge);
+    container.appendChild(row);
+  }
+}
